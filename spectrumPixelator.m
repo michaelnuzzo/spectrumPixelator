@@ -52,20 +52,20 @@ classdef spectrumPixelator < audioPlugin
 %         by the class methods
 
 %         Asynchronous buffer for input audio to allow overlapping
-        input;
+        inCollector;
 %         Asynchronous buffer for output audio
-        output;
+        outCollector;
 %         Asynchronous buffer for input audio to allow 
 %         time-synchronization of dry and wet audio
         dry;
 %         Stores the environment buffer size
-        inlen   = 0;
+        bufferLength   = 0;
 %         Stores the window size
-        winlen  = 0;
+        windowLength  = 0;
 %         Stores Kaiser-Bessel-derived window
-        win     = 0;
+        kbdWindow     = 0;
 %         Stores second half of MDCT output to allow overlapping
-        mem;
+        outputMemory;
     end
     properties (Constant)
         % User Interface mappings and deployment identification
@@ -85,50 +85,50 @@ classdef spectrumPixelator < audioPlugin
             'UniqueId','k0m5');
     end
     methods
-        function out = process(p,in)
+        function outBuffer = process(plugin,inBuffer)
 %             This is the real-time DSP loop. Audio gets passed in to
 %             the VST unit here from the DAW, gets processed, then 
 %             outputted back to the DAW.
             
 %             Check to see if this is the first time through, or if 
 %             the environment buffer or window length have changed.
-            if(p.inlen ~= length(in) || p.winlen ~= p.inlen*2^(p.timeRes))
+            if(plugin.bufferLength ~= length(inBuffer) || plugin.windowLength ~= plugin.bufferLength*2^(plugin.timeRes))
 %                 Store the environment buffer length
-                p.inlen = length(in);        
+                plugin.bufferLength = length(inBuffer);        
 %                 Set all the parameters according to the window length
-                reset(p);
+                reset(plugin);
 %                 Extra shift required for dry/wet time alignment
-                write(p.dry,zeros(p.winlen/2,2));
+                write(plugin.dry,zeros(plugin.windowLength/2,2));
             end
 
 %             Default output is 0
-            out = zeros(p.inlen,2);
+            outBuffer = zeros(plugin.bufferLength,2);
             
 %             Transfer input buffer to the asynchronous storage buffers
-            write(p.input,in);
-            write(p.dry,in);
+            write(plugin.inCollector,inBuffer);
+            write(plugin.dry,inBuffer);
             
 %             Once there are enough input samples that a window is 
 %             full, start processing.
-            if(p.input.NumUnreadSamples >= p.winlen)
+            if(plugin.inCollector.NumUnreadSamples >= plugin.windowLength)
 %                 Read a window's worth of samples, and mark half 
 %                 as being read (50% overlap)
-                in_buffer = read(p.input,p.winlen,p.winlen/2);
+                mdctInput = read(plugin.inCollector,plugin.windowLength,plugin.windowLength/2);
 %                 Convert to frequency domain
-                y_mdct = mdct(in_buffer,p.win,'PadInput',false);
+                y_mdct = mdct(mdctInput,plugin.kbdWindow,'PadInput',false);
 %                 Convert to decibels
                 y_mdct_db = mag2db(abs(y_mdct));
 %                 Peakfinding requires at least three samples
                 if(size(y_mdct_db,1) < 4)
 %                     Don't process
-                    mask = ones(p.winlen/2,1,2);
+                    mask = ones(plugin.windowLength/2,1,2);
                 else
 %                     Initialize an empty mask
-                    mask = zeros(p.winlen/2,1,2);
+                    mask = zeros(plugin.windowLength/2,1,2);
 %                     For left and right channels
                     for ch = 1:2
 %                         Save indices of frequency domain peaks
-                        [pks,locs] = findpeaks(y_mdct_db(:,1,ch),'MinPeakProminence',p.freqRes);
+                        [pks,locs] = findpeaks(y_mdct_db(:,1,ch),'MinPeakProminence',plugin.freqRes);
 %                         For each peak index, mark 1 in the mask index
                         mask(locs,ch) = 1;
                     end
@@ -136,54 +136,54 @@ classdef spectrumPixelator < audioPlugin
 %                 Save only the frequency bins where a peak was detected
                 y_mdct = y_mdct.*mask;
 %                 Convert back to time domain with the reduced data
-                out_buffer = imdct(y_mdct,p.win,'PadInput',false);
+                mdctOutput = imdct(y_mdct,plugin.kbdWindow,'PadInput',false);
 %                 Save the first half plus the previous window's 
 %                 second half to the output buffer
-                write(p.output,out_buffer(1:(p.winlen/2),:) + p.mem(1:(p.winlen/2),:));
+                write(plugin.outCollector,mdctOutput(1:(plugin.windowLength/2),:) + plugin.outputMemory(1:(plugin.windowLength/2),:));
 %                 Save the second half to memory to add to next window
-                p.mem = out_buffer(end-(p.winlen/2)+1:end,:); 
+                plugin.outputMemory = mdctOutput(end-(plugin.windowLength/2)+1:end,:); 
             end 
 %             If there are enough samples in the output buffer, start
 %             playing the processing audio
-            if(p.output.NumUnreadSamples >= p.inlen)
+            if(plugin.outCollector.NumUnreadSamples >= plugin.bufferLength)
 %                 Calculate the dry/wet mixture
-                dry = read(p.dry,p.inlen);
-                wet = read(p.output,p.inlen);
-                out = (wet*(p.dryWet/100))+(dry*((100-p.dryWet)/100));
+                dry = read(plugin.dry,plugin.bufferLength);
+                wet = read(plugin.outCollector,plugin.bufferLength);
+                outBuffer = (wet*(plugin.dryWet/100))+(dry*((100-plugin.dryWet)/100));
             end
         end
-        function p = spectrumPixelator()
+        function plugin = spectrumPixelator()
 %             This function is not part of the main DSP loop. It only runs
 %             upon initialization.
 
-            p.input = dsp.AsyncBuffer;
-            p.output = dsp.AsyncBuffer;
-            p.dry = dsp.AsyncBuffer;
-            p.mem = zeros(p.winlen/2,2);
+            plugin.inCollector = dsp.AsyncBuffer;
+            plugin.outCollector = dsp.AsyncBuffer;
+            plugin.dry = dsp.AsyncBuffer;
+            plugin.outputMemory = zeros(plugin.windowLength/2,2);
 %             This is required to define the dimensions of the 
 %             output buffer - they are otherwise only defined within 
 %             an if-statement in the main loop which is not allowed
-            write(p.output,[0 0;0 0]);
-            read(p.output,2);
+            write(plugin.outCollector,[0 0;0 0]);
+            read(plugin.outCollector,2);
         end
-        function reset(p)
+        function reset(plugin)
 %             This function resets the plugin. It runs automatically upon 
 %             initialization, if the sample rate is changed, or if the 
 %             VST is restarted in the DAW.
 
 %             Clear contents of all buffers
-            reset(p.input)
-            reset(p.output)
-            reset(p.dry)
-            write(p.output,[0 0;0 0]);
-            read(p.output,2);
+            reset(plugin.inCollector)
+            reset(plugin.outCollector)
+            reset(plugin.dry)
+            write(plugin.outCollector,[0 0;0 0]);
+            read(plugin.outCollector,2);
 %             Window length is the next power of 2 up from the current
 %             environment buffer length
-            p.winlen = p.inlen*2^(p.timeRes);
-            if(p.winlen > 0)                
-                p.win = kbdwin(p.winlen);
+            plugin.windowLength = plugin.bufferLength*2^(plugin.timeRes);
+            if(plugin.windowLength > 0)                
+                plugin.kbdWindow = kbdwin(plugin.windowLength);
             end
-            p.mem = zeros(p.winlen/2,2);    
+            plugin.outputMemory = zeros(plugin.windowLength/2,2);    
         end          
     end
 end
