@@ -62,6 +62,8 @@ classdef spectrumPixelator < audioPlugin
         bufferLength   = 0;
 %         Stores the window size
         windowLength  = 0;
+%         Stores the number of written samples
+        bufferCounter  = 0;
 %         Stores Kaiser-Bessel-derived window
         kbdWindow     = 0;
 %         Stores second half of MDCT output to allow overlapping
@@ -75,7 +77,7 @@ classdef spectrumPixelator < audioPlugin
             'Mapping',{'lin',1,100}),...
             audioPluginParameter('timeRes',...
             'DisplayName','Time Resolution',...
-            'Mapping',{'int',1,5}),...
+            'Mapping',{'lin',.01,5}),...
             audioPluginParameter('dryWet',...
             'DisplayName','Dry/Wet',...
             'Mapping',{'lin',0,100}),...
@@ -92,15 +94,13 @@ classdef spectrumPixelator < audioPlugin
             
 %             Check to see if this is the first time through, or if 
 %             the environment buffer or window length have changed.
-            if(plugin.bufferLength ~= length(inBuffer) || plugin.windowLength ~= plugin.bufferLength*2^(plugin.timeRes))
+            if(plugin.bufferLength ~= length(inBuffer) || plugin.windowLength ~= 2*floor(plugin.timeRes*plugin.getSampleRate/2))
 %                 Store the environment buffer length
                 plugin.bufferLength = length(inBuffer);        
 %                 Set all the parameters according to the window length
                 reset(plugin);
-%                 Extra shift required for dry/wet time alignment
-                write(plugin.dry,zeros(plugin.windowLength/2,2));
             end
-
+            
 %             Default output is 0
             outBuffer = zeros(plugin.bufferLength,2);
             
@@ -111,6 +111,7 @@ classdef spectrumPixelator < audioPlugin
 %             Once there are enough input samples that a window is 
 %             full, start processing.
             if(plugin.inCollector.NumUnreadSamples >= plugin.windowLength)
+
 %                 Read a window's worth of samples, and mark half 
 %                 as being read (50% overlap)
                 mdctInput = read(plugin.inCollector,plugin.windowLength,plugin.windowLength/2);
@@ -141,7 +142,7 @@ classdef spectrumPixelator < audioPlugin
 %                 second half to the output buffer
                 write(plugin.outCollector,mdctOutput(1:(plugin.windowLength/2),:) + plugin.outputMemory(1:(plugin.windowLength/2),:));
 %                 Save the second half to memory to add to next window
-                plugin.outputMemory = mdctOutput(end-(plugin.windowLength/2)+1:end,:); 
+                plugin.outputMemory = mdctOutput(end-(plugin.windowLength/2)+1:end,:);
             end 
 %             If there are enough samples in the output buffer, start
 %             playing the processing audio
@@ -149,22 +150,32 @@ classdef spectrumPixelator < audioPlugin
 %                 Calculate the dry/wet mixture
                 dry = read(plugin.dry,plugin.bufferLength);
                 wet = read(plugin.outCollector,plugin.bufferLength);
-                outBuffer = (wet*(plugin.dryWet/100))+(dry*((100-plugin.dryWet)/100));
-            end
+                outBuffer = (wet*plugin.dryWet/100)+(dry*(100-plugin.dryWet)/100);
+            end      
+            
+%             plugin.windowLength
+%             plugin.inCollector.NumUnreadSamples
+%             plugin.outCollector.NumUnreadSamples
         end
         function plugin = spectrumPixelator()
 %             This function is not part of the main DSP loop. It only runs
 %             upon initialization.
 
-            plugin.inCollector = dsp.AsyncBuffer;
-            plugin.outCollector = dsp.AsyncBuffer;
-            plugin.dry = dsp.AsyncBuffer;
+            plugin.inCollector = dsp.AsyncBuffer(1000000);
+            plugin.outCollector = dsp.AsyncBuffer(1000000);
+            plugin.dry = dsp.AsyncBuffer(1000000);
             plugin.outputMemory = zeros(plugin.windowLength/2,2);
 %             This is required to define the dimensions of the 
 %             output buffer - they are otherwise only defined within 
 %             an if-statement in the main loop which is not allowed
             write(plugin.outCollector,[0 0;0 0]);
             read(plugin.outCollector,2);
+%             Extra shift required for dry/wet time alignment
+            write(plugin.dry,zeros(plugin.windowLength/2,2));
+%             initialize with zeros (important)
+            write(plugin.inCollector,zeros(plugin.windowLength,2));
+
+
         end
         function reset(plugin)
 %             This function resets the plugin. It runs automatically upon 
@@ -179,11 +190,13 @@ classdef spectrumPixelator < audioPlugin
             read(plugin.outCollector,2);
 %             Window length is the next power of 2 up from the current
 %             environment buffer length
-            plugin.windowLength = plugin.bufferLength*2^(plugin.timeRes);
+            plugin.windowLength = 2*floor(plugin.timeRes*plugin.getSampleRate/2);
             if(plugin.windowLength > 0)                
                 plugin.kbdWindow = kbdwin(plugin.windowLength);
             end
-            plugin.outputMemory = zeros(plugin.windowLength/2,2);    
+            plugin.outputMemory = zeros(plugin.windowLength/2,2);
+            write(plugin.inCollector,zeros(plugin.windowLength,2));
+
         end          
     end
 end
