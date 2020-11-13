@@ -3,7 +3,7 @@
 # spectrumPixelator
 [![View Spectrum Pixelator on File Exchange](https://www.mathworks.com/matlabcentral/images/matlab-file-exchange.svg)](https://www.mathworks.com/matlabcentral/fileexchange/72449-spectrum-pixelator)
 
-<img width="600px" src="logo.jpg">
+<img width="600px" src="docs/logo.jpg">
 
 </div>
 
