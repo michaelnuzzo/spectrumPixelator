@@ -3,7 +3,7 @@
 # spectrumPixelator
 [![View Spectrum Pixelator on File Exchange](https://www.mathworks.com/matlabcentral/images/matlab-file-exchange.svg)](https://www.mathworks.com/matlabcentral/fileexchange/72449-spectrum-pixelator)
 
-<img width="600px" src="docs/logo.jpg">
+<img width="600px" src="docs/imgs/logo.jpg">
 
 </div>
 
@@ -11,7 +11,7 @@ The Spectrum Pixelator is a real-time VST plugin that deconstructs a real-time a
 
 <div  align="center">
 <p>For more information, please visit the Mathworks File Exchange submission linked above, or watch the short demonstration video below.</p>
-<a href="https://youtu.be/tT46hXvSd8Q"><img width="600px" src="docs/img/thumb.png"></a> 
+<a href="https://youtu.be/tT46hXvSd8Q"><img width="600px" src="docs/imgs/thumb.png"></a> 
 </div>
 
 This plugin won the Silver Award in the 2019 AES MATLAB Plugin Student Competition at the 247th Audio Engineering Society Convention.
