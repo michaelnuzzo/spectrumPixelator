@@ -15,3 +15,30 @@ The Spectrum Pixelator is a real-time VST plugin that deconstructs a real-time a
 </div>
 
 This plugin won the Silver Award in the 2019 AES MATLAB Plugin Student Competition at the 247th Audio Engineering Society Convention.
+
+## Install
+
+The VST itself can be downloaded from the [Releases page](https://github.com/michaelnuzzo/spectrumPixelator/releases) in this repository. Once downloaded, the plugin can be installed by simply dragging the VST file into your plugins folder. 
+
+```
+macOS:
+Macintosh HD/Library/Audio/Plug-Ins/VST
+```
+
+
+## Build
+
+At present, the only binaries available are for VST on macOS. However, if you would like to generate your own binary for Windows or another file format and you own a copy of MATLAB and the Audio System Toolbox, you can compile your own plugin.
+
+First, clone this repository to your local machine.
+
+```
+git clone https://github.com/michaelnuzzo/spectrumPixelator.git
+```
+
+Open the MATLAB file that contains the DSP loop (plugin/spectrumPixelator.m) in MATLAB, and run the file. In the MATLAB command window, run the VST generator. See the [MATLAB documentation](https://www.mathworks.com/help/audio/ref/generateaudioplugin.html) for different options on export flags and formats.
+
+```
+generateAudioPlugin spectrumPixelator
+```
+The compiled binary should be saved to your working MATLAB directory, and you can install the file using the process detailed in [Install](#install).
